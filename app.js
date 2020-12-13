@@ -6,6 +6,7 @@ const urlencodedParser = bodyParser.urlencoded({ extended: false });
 //const router = require('./routes')
 const express = require("express");
 const mysql = require("mysql");
+const bcrypt = require("bcrypt");
 
 // Create connection
 const db = mysql.createConnection({
@@ -49,7 +50,7 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
     reqKeys[0] !== signupParam.firstName ||
     reqKeys[1] !== signupParam.lastName ||
     reqKeys[2] != signupParam.email ||
-    reqKeys[3] != signupParam.password 
+    reqKeys[3] != signupParam.password
   ) {
     return res.status(400).send({ status: 400, message: "'firstname, 'lastname', 'email', and 'password' keys must be set.'" });
   }
@@ -60,17 +61,43 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
   }
 
   const { first_name, last_name, email, password } = req.body;
+  let hash = bcrypt.hashSync(password, 10);
   const newUser = {
     first_name: first_name,
     last_name: last_name,
     email: email,
-    password: password,
+    password: hash,
   };
   const sql = "INSERT INTO users SET ?";
   db.query(sql, newUser, (err, result) => {
     if (err) throw err;
     console.log(result);
     return res.send(`User account added`);
+  });
+});
+
+app.get("/login", (req, res, next) => {
+  const { email, password } = req.body;
+  const reqKeys = Object.keys(req.body);
+  const reqValues = Object.values(req.body);
+  if (reqKeys[0] !== "email" || reqKeys[1] !== "password") {
+    return res.status(400).send({ status: 400, message: "email and password must be set." });
+  }
+  for (let value of reqValues) {
+    if (value.length <= 0) {
+      return res.status(400).send({ status: 400, message: "email and password cannot be empty." });
+    }
+  }
+
+  const sql = "SELECT password FROM users WHERE email = ?";
+  db.query(sql, email, (err, results, fields) => {
+    if (err) throw err;
+    console.log(results);
+    if (bcrypt.compareSync(password, results[0].password)) {
+      res.send("login success");
+    } else {
+      res.send("login fail");
+    }
   });
 });
 
