@@ -7,6 +7,8 @@ const urlencodedParser = bodyParser.urlencoded({ extended: false });
 const express = require("express");
 const mysql = require("mysql");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 // Create connection
 const db = mysql.createConnection({
@@ -33,6 +35,17 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ limit: "5mb", extended: true }));
 //app.use('/', router)
 
+function generateAccessToken(email) {
+  return jwt.sign({email: email}, process.env.TOKEN_SECRET, { expiresIn: '1800s' });
+}
+
+// function authenticateToken(req, res, next) {
+//   const authHeader = req.headers("authorization");
+//   const token = authHeader + authHeader.split(" ")[1];
+//   if (token == null) return res.status(401).send({ status: 401, message: "no token was found" });
+//   jwt.verify(token);
+// }
+
 app.get("/", (req, res, next) => {
   res.send("Hello World");
 });
@@ -49,8 +62,8 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
   if (
     reqKeys[0] !== signupParam.firstName ||
     reqKeys[1] !== signupParam.lastName ||
-    reqKeys[2] != signupParam.email ||
-    reqKeys[3] != signupParam.password
+    reqKeys[2] !== signupParam.email ||
+    reqKeys[3] !== signupParam.password
   ) {
     return res.status(400).send({ status: 400, message: "'firstname, 'lastname', 'email', and 'password' keys must be set.'" });
   }
@@ -88,13 +101,13 @@ app.get("/login", (req, res, next) => {
       return res.status(400).send({ status: 400, message: "email and password cannot be empty." });
     }
   }
-
   const sql = "SELECT password FROM users WHERE email = ?";
   db.query(sql, email, (err, results, fields) => {
     if (err) throw err;
-    console.log(results);
+    const token = generateAccessToken(email);
     if (bcrypt.compareSync(password, results[0].password)) {
-      res.send("login success");
+      res.cookie("jwt", token);
+      res.send({ status: 200, message: "login success", token: token });
     } else {
       res.send("login fail");
     }
