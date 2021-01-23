@@ -3,12 +3,23 @@ dotenv.config();
 
 const bodyParser = require("body-parser");
 const urlencodedParser = bodyParser.urlencoded({ extended: false });
-//const router = require('./routes')
 const express = require("express");
 const mysql = require("mysql");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const { env } = require("process");
+const nodemailer = require("nodemailer");
+const cookieParser = require("cookie-parser");
+const { read } = require("fs");
+
+const app = express();
+const port = process.env.PORT || 5000;
+const server = app.listen(port);
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ limit: "5mb", extended: true }));
+app.use(cookieParser())
 
 // Create connection
 const db = mysql.createConnection({
@@ -27,16 +38,34 @@ db.connect((err) => {
   console.log("MySql connected...");
 });
 
-const app = express();
-const port = process.env.PORT || 5000;
-const server = app.listen(port);
-
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ limit: "5mb", extended: true }));
-//app.use('/', router)
-
 function generateAccessToken(email) {
-  return jwt.sign({email: email}, process.env.TOKEN_SECRET, { expiresIn: '1800s' });
+  return jwt.sign({ email: email }, process.env.TOKEN_SECRET, { expiresIn: "1800s" });
+}
+
+async function sendGmail() {
+  let testAccount = await nodemailer.createTestAccount();
+  let transporter = nodemailer.createTransport({
+    host: "smtp.ethereal.email",
+    port: 587,
+    secure: false,
+    auth: {
+      user: testAccount.user,
+      pass: testAccount.pass,
+    },
+  });
+
+  const verificationURL = process.env.HOST_URL + ":" + process.env.PORT + "/verification";
+
+  let info = await transporter.sendMail({
+    from: "test account from nodemailer",
+    to: process.env.GMAIL_RECEIVER,
+    subject: "verification link",
+    text: verificationURL,
+    html: "<b>hello world!</b>",
+  });
+
+  console.log("Message sent: %s", info.messageId);
+  console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
 }
 
 // function authenticateToken(req, res, next) {
@@ -80,11 +109,19 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
     last_name: last_name,
     email: email,
     password: hash,
+    verified: false,
+    //verification_expired_date: // after 1 hour, token invalid
   };
+
+  sendGmail();
+  
   const sql = "INSERT INTO users SET ?";
   db.query(sql, newUser, (err, result) => {
     if (err) throw err;
+
     console.log(result);
+    const token = generateAccessToken(email);
+    res.cookie("jwt", token);
     return res.send(`User account added`);
   });
 });
@@ -112,6 +149,12 @@ app.get("/login", (req, res, next) => {
       res.send("login fail");
     }
   });
+});
+
+app.post("/verification", urlencodedParser, (req, res, next) => {
+  const storedToken = req.cookies['jwt'];
+  // store token inside the DB?
+  res.send(storedToken);
 });
 
 // app.use((err, req, res, next) => {
