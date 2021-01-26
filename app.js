@@ -12,6 +12,7 @@ const { env } = require("process");
 const nodemailer = require("nodemailer");
 const cookieParser = require("cookie-parser");
 const { read } = require("fs");
+const moment = require("moment");
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -42,7 +43,7 @@ function generateAccessToken(email) {
   return jwt.sign({ email: email }, process.env.TOKEN_SECRET, { expiresIn: "1800s" });
 }
 
-async function sendGmail() {
+async function sendGmail(verificationToken) {
   let testAccount = await nodemailer.createTestAccount();
   let transporter = nodemailer.createTransport({
     host: "smtp.ethereal.email",
@@ -54,7 +55,7 @@ async function sendGmail() {
     },
   });
 
-  const verificationURL = process.env.HOST_URL + ":" + process.env.PORT + "/verification";
+  const verificationURL = process.env.HOST_URL + ":" + process.env.PORT + "/verification" + "\n" + verificationToken;
 
   let info = await transporter.sendMail({
     from: "test account from nodemailer",
@@ -102,6 +103,8 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
     }
   }
 
+  const verificationExpireDate = moment().add(1, 'h').unix();
+
   const { first_name, last_name, email, password } = req.body;
   let hash = bcrypt.hashSync(password, 10);
   const newUser = {
@@ -110,10 +113,11 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
     email: email,
     password: hash,
     verified: false,
-    //verification_expired_date: // after 1 hour, token invalid
+    verification_expire_date: verificationExpireDate,
+    verification_token: hash,
   };
 
-  sendGmail();
+  sendGmail(hash);
   
   const sql = "INSERT INTO users SET ?";
   db.query(sql, newUser, (err, result) => {
