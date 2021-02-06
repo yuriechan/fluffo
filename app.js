@@ -107,6 +107,7 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
 
   const { first_name, last_name, email, password } = req.body;
   let hash = bcrypt.hashSync(password, 10);
+  const token = generateAccessToken(email);
   const newUser = {
     first_name: first_name,
     last_name: last_name,
@@ -114,18 +115,17 @@ app.post("/signup", urlencodedParser, (req, res, next) => {
     password: hash,
     verified: false,
     verification_expire_date: verificationExpireDate,
-    verification_token: hash,
+    verification_token: token,
   };
 
-  sendGmail(hash);
+  sendGmail(token);
   
   const sql = "INSERT INTO users SET ?";
   db.query(sql, newUser, (err, result) => {
     if (err) throw err;
 
     console.log(result);
-    const token = generateAccessToken(email);
-    res.cookie("jwt", token);
+    res.cookie("signup-jwt", token);
     return res.send(`User account added`);
   });
 });
@@ -156,7 +156,7 @@ app.get("/login", (req, res, next) => {
 });
 
 app.post("/verification", urlencodedParser, (req, res, next) => {
-  const storedToken = req.cookies['jwt'];
+  const storedToken = req.cookies['signup-jwt'];
   // store token inside the DB?
   res.send(storedToken);
 });
